@@ -1,0 +1,6 @@
+{
+  "name": "Backend Quest",
+  "description": "Interactive backend engineering simulation game teaching system design, cloud architecture, traffic scaling, and production incident response.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
