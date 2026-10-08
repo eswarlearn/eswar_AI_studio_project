@@ -1,243 +1,210 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { PlayerProfile, Achievement } from '../types/game';
-import { loadSavedProfile, savePlayerProfile, resetGameProgress } from '../engine/persistence';
-import { calculatePlayerRank, calculateLevelFromXp } from '../engine/scoring';
-import { WORLDS } from '../data/worlds';
+import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import type { PlayerProfile } from '../types/game';
+import { INITIAL_PLAYER_PROFILE } from '../engine/scoring';
 import { ACHIEVEMENTS_CATALOG } from '../data/achievements';
+import { ApiError, bootstrap, createSession, login as apiLogin, register as apiRegister, logout as apiLogout, resetProgressRequest, submitIncident, submitLevel, unlockSkillRequest, type ActiveSession } from '../engine/api';
 import confetti from 'canvas-confetti';
 
-export type GameView = 
-  | 'home'
-  | 'worldmap'
-  | 'level'
-  | 'incident'
-  | 'skilltree'
-  | 'concepts'
-  | 'achievements'
-  | 'sandbox';
+export type GameView = 'home' | 'worldmap' | 'level' | 'incident' | 'skilltree' | 'concepts' | 'achievements' | 'sandbox' | 'chaos-lab' | 'senior-architect';
+interface ToastNotification { id: string; type: 'xp' | 'achievement' | 'level-up'; title: string; subtitle: string; }
 
-interface ToastNotification {
-  id: string;
-  type: 'xp' | 'achievement' | 'level-up';
-  title: string;
-  subtitle: string;
+export interface UserState {
+  username: string | null;
+  isGuest: boolean;
 }
 
 interface GameContextType {
-  profile: PlayerProfile;
-  activeView: GameView;
-  activeLevelId: number;
-  activeIncidentId: string | null;
-  toasts: ToastNotification[];
-  setActiveView: (view: GameView) => void;
-  startLevel: (levelId: number) => void;
-  completeLevel: (levelId: number, stars: number, score: number, xpGained: number, achievementId?: string) => void;
+  profile: PlayerProfile; activeView: GameView; activeLevelId: number; activeIncidentId: string | null;
+  activeSession: ActiveSession | null; isLoading: boolean; apiError: string | null; toasts: ToastNotification[];
+  currentUser: UserState;
+  guestBypassed: boolean;
+  continueAsGuest: () => void;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  setActiveView: (view: GameView) => void; startLevel: (levelId: number) => Promise<void>; resumeSession: () => void;
+  completeLevel: (input: { levelId: number; nodes: import('../types/game').ArchitectureNode[]; trafficPattern: string; answers: Record<string, string> }) => Promise<{ stars: number; score: number }>;
   startIncident: (incidentId: string) => void;
-  completeIncident: (incidentId: string, stars: number, xpGained: number) => void;
-  unlockSkill: (skillId: string, xpCost: number) => boolean;
-  dismissToast: (id: string) => void;
-  resetAllProgress: () => void;
+  completeIncident: (incidentId: string, actionIds: string[], rootCauseId: string, elapsedSeconds: number) => Promise<void>;
+  unlockSkill: (skillId: string) => Promise<boolean>; dismissToast: (id: string) => void; resetAllProgress: () => Promise<void>;
+  clearApiError: () => void;
 }
-
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [profile, setProfile] = useState<PlayerProfile>(() => loadSavedProfile());
+  const [profile, setProfile] = useState<PlayerProfile>(INITIAL_PLAYER_PROFILE);
+  const [currentUser, setCurrentUser] = useState<UserState>({ username: null, isGuest: true });
+  const [guestBypassed, setGuestBypassed] = useState(false);
   const [activeView, setActiveView] = useState<GameView>('home');
-  const [activeLevelId, setActiveLevelId] = useState<number>(1);
+  const [activeLevelId, setActiveLevelId] = useState(1);
   const [activeIncidentId, setActiveIncidentId] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
-  // Automatically sync to localStorage on change
   useEffect(() => {
-    savePlayerProfile(profile);
-  }, [profile]);
+    let alive = true;
+    bootstrap().then(result => {
+      if (!alive) return;
+      setProfile(result.profile);
+      setActiveSession(result.activeSession);
+      setCurrentUser({ username: result.username, isGuest: !result.username });
+      if (result.activeSession) setActiveLevelId(result.activeSession.levelId);
+    }).catch(error => {
+      if (alive) setApiError(error instanceof Error ? error.message : 'Could not load saved game progress.');
+    }).finally(() => { if (alive) setIsLoading(false); });
+    return () => { alive = false; };
+  }, []);
 
-  const addToast = (type: 'xp' | 'achievement' | 'level-up', title: string, subtitle: string) => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts(prev => [...prev, { id, type, title, subtitle }]);
-    setTimeout(() => {
-      dismissToast(id);
-    }, 4500);
+  const addToast = (type: ToastNotification['type'], title: string, subtitle: string) => {
+    const id = Math.random().toString(36).slice(2, 9);
+    setToasts(previous => [...previous, { id, type, title, subtitle }]);
+    setTimeout(() => setToasts(previous => previous.filter(toast => toast.id !== id)), 4500);
   };
+  const dismissToast = (id: string) => setToasts(previous => previous.filter(toast => toast.id !== id));
+  const fail = (error: unknown) => setApiError(error instanceof ApiError ? error.message : 'The server could not save this action. Please try again.');
 
-  const dismissToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+  const startLevel = async (levelId: number) => {
+    try {
+      const session = await createSession(levelId);
+      setActiveSession(session);
+      setActiveLevelId(levelId);
+      setActiveIncidentId(null);
+      setActiveView('level');
+      setApiError(null);
+    } catch (error) { fail(error); }
   };
-
-  const startLevel = (levelId: number) => {
-    setActiveLevelId(levelId);
-    setActiveIncidentId(null);
-    setActiveView('level');
-  };
-
   const startIncident = (incidentId: string) => {
     setActiveIncidentId(incidentId);
     setActiveView('incident');
   };
-
-  const completeLevel = (levelId: number, stars: number, score: number, xpGained: number, achievementId?: string) => {
-    try {
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.65 }
-      });
-    } catch {
-      // Ignore if confetti is disabled
-    }
-
-    setProfile(prev => {
-      const newXp = prev.xp + xpGained;
-      const rankInfo = calculatePlayerRank(newXp);
-      const levelInfo = calculateLevelFromXp(newXp);
-      
-      const isNewCompletion = !prev.completedLevelIds.includes(levelId);
-      const newCompletedLevels = isNewCompletion
-        ? [...prev.completedLevelIds, levelId]
-        : prev.completedLevelIds;
-
-      // Check world unlocks
-      const newUnlockedWorlds = [...prev.unlockedWorldIds];
-      WORLDS.forEach(world => {
-        if (!newUnlockedWorlds.includes(world.id)) {
-          // World unlocks if previous world has at least 1 completed level
-          const prevWorldIndex = WORLDS.findIndex(w => w.id === world.id) - 1;
-          if (prevWorldIndex >= 0) {
-            const prevWorld = WORLDS[prevWorldIndex];
-            const hasDonePrev = prevWorld.levelIds.some(id => newCompletedLevels.includes(id));
-            if (hasDonePrev) {
-              newUnlockedWorlds.push(world.id);
-            }
-          }
-        }
-      });
-
-      // Check achievements
-      const newUnlockedAchievements = [...prev.unlockedAchievementIds];
-      if (achievementId && !newUnlockedAchievements.includes(achievementId)) {
-        newUnlockedAchievements.push(achievementId);
-        const ach = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
-        if (ach) {
-          addToast('achievement', `Achievement: ${ach.title}`, ach.description);
-        }
-      }
-
-      addToast('xp', `+${xpGained} XP Earned`, `Level ${levelId} Completed with ${stars} Stars!`);
-
-      if (levelInfo.level > prev.level) {
-        addToast('level-up', `Rank Level Up!`, `You reached Engineering Level ${levelInfo.level}`);
-      }
-
-      return {
-        ...prev,
-        xp: newXp,
-        level: levelInfo.level,
-        rank: rankInfo.rank,
-        rankTitle: rankInfo.title,
-        completedLevelIds: newCompletedLevels,
-        unlockedWorldIds: newUnlockedWorlds,
-        unlockedAchievementIds: newUnlockedAchievements,
-        levelScores: {
-          ...prev.levelScores,
-          [levelId]: {
-            stars: Math.max(stars, prev.levelScores[levelId]?.stars || 0),
-            bestCost: prev.levelScores[levelId]?.bestCost ? Math.min(prev.levelScores[levelId].bestCost, score) : score,
-            bestLatency: 0
-          }
-        }
-      };
-    });
-  };
-
-  const completeIncident = (incidentId: string, stars: number, xpGained: number) => {
-    try {
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
-    } catch {
-      // Ignore
-    }
-
-    setProfile(prev => {
-      const newXp = prev.xp + xpGained;
-      const rankInfo = calculatePlayerRank(newXp);
-      const levelInfo = calculateLevelFromXp(newXp);
-      const newAch = [...prev.unlockedAchievementIds];
-
-      if (!newAch.includes('incident_commander')) {
-        newAch.push('incident_commander');
-      }
-
-      addToast('xp', `+${xpGained} XP Incident Resolved`, `Production outage stabilized with ${stars} stars!`);
-
-      return {
-        ...prev,
-        xp: newXp,
-        level: levelInfo.level,
-        rank: rankInfo.rank,
-        rankTitle: rankInfo.title,
-        unlockedAchievementIds: newAch,
-        incidentResolutions: {
-          ...prev.incidentResolutions,
-          [incidentId]: {
-            stars,
-            timeSpentSeconds: 0
-          }
-        }
-      };
-    });
-  };
-
-  const unlockSkill = (skillId: string, xpCost: number): boolean => {
-    if (profile.unlockedSkillIds.includes(skillId)) return false;
-    if (profile.xp < xpCost) return false;
-
-    setProfile(prev => ({
-      ...prev,
-      unlockedSkillIds: [...prev.unlockedSkillIds, skillId]
-    }));
-    addToast('level-up', 'Skill Mastered', `Unlocked ${skillId.replace('skill-', '').toUpperCase()}`);
-    return true;
-  };
-
-  const resetAllProgress = () => {
-    const fresh = resetGameProgress();
-    setProfile(fresh);
-    setActiveView('home');
-    setActiveLevelId(1);
+  const resumeSession = () => {
+    if (!activeSession) return;
+    setActiveLevelId(activeSession.levelId);
     setActiveIncidentId(null);
+    setActiveView('level');
   };
 
-  return (
-    <GameContext.Provider
-      value={{
-        profile,
-        activeView,
-        activeLevelId,
-        activeIncidentId,
-        toasts,
-        setActiveView,
-        startLevel,
-        completeLevel,
-        startIncident,
-        completeIncident,
-        unlockSkill,
-        dismissToast,
-        resetAllProgress
-      }}
-    >
-      {children}
-    </GameContext.Provider>
-  );
+  const completeLevel = async (input: { levelId: number; nodes: import('../types/game').ArchitectureNode[]; trafficPattern: string; answers: Record<string, string> }) => {
+    if (!activeSession) throw new Error('No active game session. Start this level again.');
+    try {
+      const result = await submitLevel(activeSession.id, input);
+      const priorAchievements = profile.unlockedAchievementIds;
+      setProfile(result.profile);
+      const gainedXp = Math.max(0, result.profile.xp - profile.xp);
+      addToast('xp', gainedXp ? '+' + gainedXp + ' XP Earned' : 'Best result updated', 'Level ' + input.levelId + ' completed with ' + result.result.stars + ' stars.');
+      for (const id of result.profile.unlockedAchievementIds) {
+        if (!priorAchievements.includes(id)) {
+          const achievement = ACHIEVEMENTS_CATALOG.find(item => item.id === id);
+          if (achievement) addToast('achievement', 'Achievement: ' + achievement.title, achievement.description);
+        }
+      }
+      const oldLevel = profile.level;
+      if (result.profile.level > oldLevel) addToast('level-up', 'Engineering Level Up', 'You reached Engineering Level ' + result.profile.level);
+      setActiveSession(null);
+      setApiError(null);
+      try { confetti({ particleCount: 80, spread: 60, origin: { y: 0.65 } }); } catch { /* optional visual effect */ }
+      return result.result;
+    } catch (error) { fail(error); throw error; }
+  };
+
+  const completeIncident = async (incidentId: string, actionIds: string[], rootCauseId: string, elapsedSeconds: number) => {
+    try {
+      const result = await submitIncident(incidentId, actionIds, rootCauseId, elapsedSeconds);
+      const gainedXp = Math.max(0, result.profile.xp - profile.xp);
+      setProfile(result.profile);
+      addToast('xp', gainedXp ? '+' + gainedXp + ' XP Incident Resolved' : 'Incident result updated', 'Production outage stabilized with ' + result.result.stars + ' stars.');
+      setApiError(null);
+      try { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } catch { /* optional visual effect */ }
+    } catch (error) { fail(error); throw error; }
+  };
+
+  const unlockSkill = async (skillId: string): Promise<boolean> => {
+    try {
+      const next = await unlockSkillRequest(skillId);
+      setProfile(next);
+      setApiError(null);
+      addToast('level-up', 'Skill Mastered', 'Unlocked ' + skillId.replace('skill-', '').toUpperCase());
+      return true;
+    } catch (error) { fail(error); return false; }
+  };
+
+  const login = async (username: string, password: string) => {
+    try {
+      setIsLoading(true);
+      const result = await apiLogin(username, password);
+      setProfile(result.profile);
+      setActiveSession(result.activeSession);
+      if (result.activeSession) setActiveLevelId(result.activeSession.levelId);
+      setCurrentUser({ username: result.username, isGuest: false });
+      setGuestBypassed(false);
+      setApiError(null);
+      addToast('level-up', 'Welcome back, ' + result.username + '!', 'Progress and completed levels restored from database.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const register = async (username: string, password: string) => {
+    try {
+      setIsLoading(true);
+      const result = await apiRegister(username, password);
+      setProfile(result.profile);
+      setCurrentUser({ username: result.username, isGuest: false });
+      setGuestBypassed(false);
+      setApiError(null);
+      addToast('level-up', 'Account Created: ' + result.username, 'Your profile and future game progress are now saved in PostgreSQL.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      setIsLoading(true);
+      apiLogout();
+      const result = await bootstrap();
+      setProfile(result.profile);
+      setActiveSession(result.activeSession);
+      setCurrentUser({ username: result.username, isGuest: !result.username });
+      setGuestBypassed(false);
+      setActiveView('home');
+      setApiError(null);
+      addToast('level-up', 'Logged Out', 'Switched to guest session.');
+    } catch (error) {
+      fail(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const continueAsGuest = () => {
+    setGuestBypassed(true);
+    addToast('xp', 'Guest Mode', 'Temporary play without account persistence.');
+  };
+
+  const resetAllProgress = async () => {
+    try {
+      const fresh = await resetProgressRequest();
+      setProfile(fresh);
+      setActiveSession(null);
+      setActiveLevelId(1);
+      setActiveView('home');
+      setApiError(null);
+    } catch (error) { fail(error); }
+  };
+
+  return <GameContext.Provider value={{
+    profile, activeView, activeLevelId, activeIncidentId, activeSession, isLoading, apiError, toasts,
+    currentUser, guestBypassed, continueAsGuest, login, register, logout,
+    setActiveView, startLevel, resumeSession, completeLevel, startIncident, completeIncident, unlockSkill,
+    dismissToast, resetAllProgress, clearApiError: () => setApiError(null)
+  }}>{children}</GameContext.Provider>;
 };
 
 export const useGame = (): GameContextType => {
   const context = useContext(GameContext);
-  if (!context) {
-    throw new Error('useGame must be used within a GameProvider');
-  }
+  if (!context) throw new Error('useGame must be used within a GameProvider');
   return context;
 };

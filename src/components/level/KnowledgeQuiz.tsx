@@ -4,14 +4,14 @@ import { HelpCircle, CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
 
 interface KnowledgeQuizProps {
   questions: QuizQuestion[];
-  onComplete: (correctCount: number) => void;
+  onComplete: (answers: Record<string, string>) => void;
 }
 
 export const KnowledgeQuiz: React.FC<KnowledgeQuizProps> = ({ questions, onComplete }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
-  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
   if (!questions || questions.length === 0) return null;
 
@@ -22,10 +22,7 @@ export const KnowledgeQuiz: React.FC<KnowledgeQuizProps> = ({ questions, onCompl
     setSelectedOptionId(optId);
     setHasAnswered(true);
 
-    const isCorrect = currentQ.options.find(o => o.id === optId)?.isCorrect;
-    if (isCorrect) {
-      setCorrectAnswers(prev => prev + 1);
-    }
+    setAnswers(previous => ({ ...previous, [currentQ.id]: optId }));
   };
 
   const handleNext = () => {
@@ -34,7 +31,7 @@ export const KnowledgeQuiz: React.FC<KnowledgeQuizProps> = ({ questions, onCompl
       setSelectedOptionId(null);
       setHasAnswered(false);
     } else {
-      onComplete(correctAnswers + (currentQ.options.find(o => o.id === selectedOptionId)?.isCorrect ? 1 : 0));
+      onComplete({ ...answers, [currentQ.id]: selectedOptionId! });
     }
   };
 

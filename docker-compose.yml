@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: backendquest
+      POSTGRES_USER: backendquest
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-local-password}
+    volumes:
+      - backendquest_pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backendquest -d backendquest"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: /api/v1
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgres://backendquest:${POSTGRES_PASSWORD:-change-this-local-password}@postgres:5432/backendquest
+      DATABASE_POOL_MAX: 20
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000,http://127.0.0.1:8080}
+      FRONTEND_DIST: dist
+    volumes:
+      - ./dist:/app/dist:ro
+      - ./backend:/app/backend:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  integration-db:
+    image: postgres:17-alpine
+    profiles: [integration]
+    environment:
+      POSTGRES_DB: backendquest_test
+      POSTGRES_USER: backendquest_test
+      POSTGRES_PASSWORD: integration-only-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backendquest_test -d backendquest_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  integration-tests:
+    profiles: [integration]
+    build:
+      context: .
+      target: build
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgres://backendquest_test:integration-only-password@integration-db:5432/backendquest_test
+      DATABASE_POOL_MAX: 5
+      CORS_ORIGINS: http://localhost:3000
+    command: ["npm", "run", "test:integration"]
+    depends_on:
+      integration-db:
+        condition: service_healthy
+
+volumes:
+  backendquest_pgdata:

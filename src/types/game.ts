@@ -4,6 +4,7 @@ export type ComponentId =
   | 'client'
   | 'dns'
   | 'cdn'
+  | 'nginx-reverse-proxy'
   | 'load-balancer'
   | 'api-gateway'
   | 'server'
@@ -12,8 +13,12 @@ export type ComponentId =
   | 'redis'
   | 'postgresql'
   | 'mongodb'
+  | 's3-storage'
   | 'kafka'
   | 'rabbitmq'
+  | 'dead-letter-queue'
+  | 'circuit-breaker'
+  | 'service-mesh'
   | 'telemetry-collector'
   | 'waf-firewall'
   | 'worker-service';
@@ -34,12 +39,60 @@ export interface InfrastructureComponent {
   supportedProtocols: string[];
 }
 
+export interface DatabaseNodeConfig {
+  dbType?: 'relational' | 'document' | 'key-value' | 'object';
+  primaryKey?: string;
+  indexes?: string[];
+  isolationLevel?: 'READ_UNCOMMITTED' | 'READ_COMMITTED' | 'REPEATABLE_READ' | 'SERIALIZABLE';
+  connectionPoolSize?: number;
+  readReplicas?: number;
+}
+
+export interface CacheNodeConfig {
+  strategy?: 'cache-aside' | 'read-through' | 'write-through' | 'write-behind';
+  ttlSeconds?: number;
+  evictionPolicy?: 'LRU' | 'LFU' | 'FIFO';
+}
+
+export interface QueueNodeConfig {
+  topic?: string;
+  deliverySemantics?: 'at-least-once' | 'at-most-once' | 'exactly-once';
+  partitions?: number;
+  consumerGroup?: string;
+  hasDeadLetterQueue?: boolean;
+  batchSize?: number;
+}
+
+export interface ResilienceNodeConfig {
+  circuitBreakerEnabled?: boolean;
+  tripThresholdPercent?: number;
+  rateLimitRps?: number;
+  retryCount?: number;
+  idempotencyEnabled?: boolean;
+}
+
+export interface VisualPacket {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  type: 'get' | 'post' | 'grpc' | 'websocket' | 'kafka' | 'malicious';
+  label: string;
+  progress: number; // 0 to 1
+  speed: number;
+}
+
 export interface ArchitectureNode {
   instanceId: string;
   componentId: ComponentId;
   label?: string;
   position: { x: number; y: number };
   connections: string[]; // target instanceIds
+  protocol?: 'HTTP/1.1' | 'HTTP/2' | 'HTTP/3' | 'HTTPS' | 'gRPC' | 'WebSocket' | 'Kafka' | 'AMQP' | 'TCP';
+  payloadFormat?: 'JSON' | 'Protobuf' | 'Binary' | 'Avro';
+  databaseConfig?: DatabaseNodeConfig;
+  cacheConfig?: CacheNodeConfig;
+  queueConfig?: QueueNodeConfig;
+  resilienceConfig?: ResilienceNodeConfig;
   config?: {
     replicas?: number;
     cacheTtlSeconds?: number;
@@ -55,6 +108,7 @@ export interface SimulationMetrics {
   requestsPerSecond: number;
   targetRps: number;
   latencyMs: number;
+  p50LatencyMs: number;
   p95LatencyMs: number;
   p99LatencyMs: number;
   errorRate: number; // 0 to 1
@@ -65,9 +119,15 @@ export interface SimulationMetrics {
   queueDepth: number;
   cacheHitRate: number; // 0 to 1
   hourlyCost: number;
+  revenuePerHour: number;
+  netProfitPerHour: number;
+  errorBudgetPercent: number; // 0 to 100
+  sloCompliance: number; // e.g. 99.9%
   isHealthy: boolean;
   statusMessage: string;
   bottleneckNodeId?: string;
+  activeChaosInjections?: string[];
+  representativePackets?: VisualPacket[];
   nodeMetrics: Record<string, {
     cpu: number;
     memory: number;

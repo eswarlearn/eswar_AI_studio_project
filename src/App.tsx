@@ -6,13 +6,16 @@ import { WorldMap } from './components/worldmap/WorldMap';
 import { LevelView } from './components/level/LevelView';
 import { IncidentCommander } from './components/incident/IncidentCommander';
 import { ArchitectureSandbox } from './components/sandbox/ArchitectureSandbox';
+import { ChaosLab } from './components/chaos/ChaosLab';
+import { SeniorArchitectStudio } from './components/architect/SeniorArchitectStudio';
 import { SkillTreeView } from './components/skilltree/SkillTreeView';
 import { ConceptDirectory } from './components/concepts/ConceptDirectory';
 import { AchievementList } from './components/achievements/AchievementList';
-import { Zap, Award, Sparkles, X } from 'lucide-react';
+import { AuthPage } from './components/auth/AuthPage';
+import { Zap, Award, Sparkles, X, Loader2 } from 'lucide-react';
 
 const MainContent: React.FC = () => {
-  const { activeView, toasts, dismissToast } = useGame();
+  const { activeView, toasts, dismissToast, isLoading, apiError, clearApiError, currentUser, guestBypassed } = useGame();
 
   const renderActiveView = () => {
     switch (activeView) {
@@ -26,6 +29,10 @@ const MainContent: React.FC = () => {
         return <IncidentCommander />;
       case 'sandbox':
         return <ArchitectureSandbox />;
+      case 'chaos-lab':
+        return <ChaosLab />;
+      case 'senior-architect':
+        return <SeniorArchitectStudio />;
       case 'skilltree':
         return <SkillTreeView />;
       case 'concepts':
@@ -37,12 +44,29 @@ const MainContent: React.FC = () => {
     }
   };
 
+  // Loading state while checking database token
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-3" />
+        <h2 className="text-base font-bold text-white tracking-tight">Connecting to Backend Quest</h2>
+        <p className="text-xs text-slate-400 mt-1">Connecting to PostgreSQL and loading your saved progress...</p>
+      </div>
+    );
+  }
+
+  // Auth Gate: Require login or account registration before opening the game UI
+  if (!currentUser.username && !guestBypassed) {
+    return <AuthPage />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600/30">
       {/* 3-Zone Clean Header */}
       <Header />
 
       {/* Main Game Surface */}
+      {apiError && <div role="alert" className="mx-auto mt-3 w-[min(96%,72rem)] rounded-lg border border-red-900 bg-red-950/50 px-4 py-3 text-xs text-red-200 flex justify-between gap-4"><span>{apiError}</span><button onClick={clearApiError} className="text-red-300 hover:text-white">Dismiss</button></div>}
       <main className="flex-1 pb-16 pt-4">
         {renderActiveView()}
       </main>

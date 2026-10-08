@@ -240,5 +240,80 @@ export const INFRASTRUCTURE_COMPONENTS: Record<ComponentId, InfrastructureCompon
       cons: ['Requires idempotent job handlers to tolerate at-least-once delivery']
     },
     supportedProtocols: ['AMQP', 'Kafka Wire']
+  },
+  'nginx-reverse-proxy': {
+    id: 'nginx-reverse-proxy',
+    name: 'Nginx Reverse Proxy',
+    category: 'network',
+    description: 'High-performance event-driven reverse proxy for SSL/TLS termination, HTTP/2 multiplexing, static file caching, and URL rewriting.',
+    baseCost: 15,
+    baseCapacity: 35000,
+    baseLatency: 3,
+    failureModes: ['Worker connections exhaustion under un-tuned ulimit', 'Backend upstream timeout (504 Gateway Timeout)'],
+    tradeoffs: {
+      pros: ['Offloads TLS decryption and compression from application servers', 'Micro-caching reduces backend load by 40%'],
+      cons: ['Requires careful configuration of worker_processes, buffers, and keepalive timeouts']
+    },
+    supportedProtocols: ['HTTP/1.1', 'HTTP/2', 'HTTP/3', 'HTTPS', 'gRPC']
+  },
+  's3-storage': {
+    id: 's3-storage',
+    name: 'Cloud Object Storage (S3 / Blob)',
+    category: 'storage',
+    description: 'Massively scalable distributed blob storage for images, videos, backups, and user uploads with 99.999999999% durability.',
+    baseCost: 12,
+    baseCapacity: 100000,
+    baseLatency: 35,
+    failureModes: ['Bucket policy misconfiguration leading to public data leakage', 'Eventual consistency read delay on immediate overwrite'],
+    tradeoffs: {
+      pros: ['Virtually infinite capacity without storage management', 'Extremely cheap per gigabyte compared to SSD block storage'],
+      cons: ['High latency per single request (30-50ms) compared to SSD database queries']
+    },
+    supportedProtocols: ['HTTPS', 'REST', 'S3 API']
+  },
+  'service-mesh': {
+    id: 'service-mesh',
+    name: 'Envoy / Istio Service Mesh',
+    category: 'network',
+    description: 'Sidecar proxy mesh managing service-to-service communication with mutual TLS (mTLS), distributed tracing, and traffic splitting.',
+    baseCost: 32,
+    baseCapacity: 25000,
+    baseLatency: 2,
+    failureModes: ['Control plane synchronization lag', 'Sidecar CPU memory bloat across large pod fleets'],
+    tradeoffs: {
+      pros: ['Zero-trust cryptographic identity (SPIFFE/mTLS)', 'Fine-grained Canary traffic splitting and observability'],
+      cons: ['Additional sidecar memory overhead and control plane configuration complexity']
+    },
+    supportedProtocols: ['mTLS', 'gRPC', 'HTTP/2']
+  },
+  'circuit-breaker': {
+    id: 'circuit-breaker',
+    name: 'Circuit Breaker Tower',
+    category: 'security',
+    description: 'Automated resilience guard that trips OPEN when downstream services fail, shedding load and preventing cascading 504 outages.',
+    baseCost: 10,
+    baseCapacity: 50000,
+    baseLatency: 1,
+    failureModes: ['Premature tripping on temporary network jitter if threshold is too sensitive'],
+    tradeoffs: {
+      pros: ['Fails fast with fallback responses within 1ms instead of waiting for 30s gateway timeouts', 'Self-heals with Half-Open probing'],
+      cons: ['Requires fallback strategy handling (e.g., degraded degraded user experience)']
+    },
+    supportedProtocols: ['In-Memory', 'HTTP', 'gRPC']
+  },
+  'dead-letter-queue': {
+    id: 'dead-letter-queue',
+    name: 'Dead Letter Queue (DLQ)',
+    category: 'messaging',
+    description: 'Quarantine buffer that isolates unprocessable poison-pill messages after max retries, preventing worker crash loops.',
+    baseCost: 10,
+    baseCapacity: 20000,
+    baseLatency: 2,
+    failureModes: ['DLQ overflow if alerts are ignored and unhandled messages accumulate indefinitely'],
+    tradeoffs: {
+      pros: ['Stops infinite consumer CrashLoopBackOff loops on malformed payloads', 'Preserves messages for post-mortem debugging and manual replay'],
+      cons: ['Requires monitoring and dedicated alerting when DLQ receives items']
+    },
+    supportedProtocols: ['AMQP', 'Kafka Wire', 'SQS']
   }
 };

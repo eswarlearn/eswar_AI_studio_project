@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 export const WorldMap: React.FC = () => {
-  const { profile, startLevel, startIncident } = useGame();
+  const { profile, startLevel, startIncident, activeSession, resumeSession } = useGame();
 
   const getWorldIcon = (iconName: string, className = "w-5 h-5") => {
     switch (iconName) {
@@ -49,11 +49,11 @@ export const WorldMap: React.FC = () => {
             if (nextLevel) {
               return (
                 <button
-                  onClick={() => startLevel(nextLevel.id)}
+                  onClick={() => activeSession ? resumeSession() : void startLevel(nextLevel.id)}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-md transition-all active:scale-95 whitespace-nowrap"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Continue: Level {nextLevel.id} ({nextLevel.title})</span>
+                  <span>{activeSession ? 'Resume: Level ' + activeSession.levelId : 'Continue: Level ' + nextLevel.id + ' (' + nextLevel.title + ')'}</span>
                 </button>
               );
             }

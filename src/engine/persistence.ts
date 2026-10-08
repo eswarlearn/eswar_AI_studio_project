@@ -50,3 +50,16 @@ export function resetGameProgress(): PlayerProfile {
   }
   return { ...INITIAL_PLAYER_PROFILE };
 }
+
+export function readLegacySavedProfile(): PlayerProfile | null {
+  try {
+    const raw = localStorage.getItem(SAVE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: SaveGamePayload = JSON.parse(raw);
+    return parsed && parsed.profile ? { ...INITIAL_PLAYER_PROFILE, ...parsed.profile } : null;
+  } catch { return null; }
+}
+
+export function removeLegacySavedProfile(): void {
+  try { localStorage.removeItem(SAVE_STORAGE_KEY); } catch { /* Keep backend persistence usable if storage is disabled. */ }
+}

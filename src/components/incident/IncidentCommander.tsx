@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 export const IncidentCommander: React.FC = () => {
-  const { activeIncidentId, completeIncident, setActiveView } = useGame();
+  const { activeIncidentId, completeIncident, setActiveView, apiError } = useGame();
   
   // Default to first scenario if none selected
   const scenario: IncidentScenario = 
@@ -64,9 +64,9 @@ export const IncidentCommander: React.FC = () => {
     if (!selectedRootCauseId) return;
     const selected = scenario.rootCauseOptions.find(o => o.id === selectedRootCauseId);
     if (selected?.isCorrect) {
-      setIsResolved(true);
       setIsRunning(false);
-      completeIncident(scenario.id, 3, 500);
+      const elapsedSeconds = scenario.timeLimitSeconds - timeLeft;
+      void completeIncident(scenario.id, executedActionIds, selectedRootCauseId, elapsedSeconds).then(() => setIsResolved(true)).catch(() => undefined);
     }
   };
 
@@ -81,6 +81,7 @@ export const IncidentCommander: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 flex flex-col gap-6">
+      {apiError && <div role="alert" className="rounded-lg border border-red-900 bg-red-950/40 px-4 py-3 text-xs text-red-200">{apiError}</div>}
       {/* Top Incident Banner */}
       <div className="bg-red-950/40 border border-red-900/80 rounded-xl p-5 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start gap-3.5">

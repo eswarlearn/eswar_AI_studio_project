@@ -136,7 +136,12 @@ function formatComponentName(id: ComponentId): string {
     rabbitmq: 'RabbitMQ',
     'telemetry-collector': 'Telemetry Collector',
     'waf-firewall': 'WAF Firewall',
-    'worker-service': 'Worker Service'
+    'worker-service': 'Worker Service',
+    'nginx-reverse-proxy': 'Nginx Reverse Proxy',
+    's3-storage': 'S3 Object Storage',
+    'service-mesh': 'Service Mesh',
+    'circuit-breaker': 'Circuit Breaker',
+    'dead-letter-queue': 'Dead Letter Queue'
   };
   return names[id] || id;
 }

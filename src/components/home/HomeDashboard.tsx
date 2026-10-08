@@ -6,11 +6,11 @@ import { ACHIEVEMENTS_CATALOG } from '../../data/achievements';
 import { calculateLevelFromXp, RANK_TIERS } from '../../engine/scoring';
 import { 
   Play, Map, Flame, Cpu, Shield, Award, BookOpen, 
-  CheckCircle2, ArrowRight, Activity, Terminal, Star, Sparkles 
+  CheckCircle2, ArrowRight, Activity, Terminal, Star, Sparkles, Skull, Crown 
 } from 'lucide-react';
 
 export const HomeDashboard: React.FC = () => {
-  const { profile, setActiveView, startLevel, startIncident } = useGame();
+  const { profile, setActiveView, startLevel, startIncident, activeSession, resumeSession } = useGame();
   const levelInfo = calculateLevelFromXp(profile.xp);
 
   // Find next uncompleted level
@@ -45,11 +45,11 @@ export const HomeDashboard: React.FC = () => {
             {/* Quick Actions */}
             <div className="flex items-center gap-3 pt-2 flex-wrap">
               <button
-                onClick={() => startLevel(nextLevel.id)}
+                onClick={() => activeSession ? resumeSession() : void startLevel(nextLevel.id)}
                 className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/30 transition-all active:scale-95 cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-current" />
-                <span>Continue: Level {nextLevel.id} ({nextLevel.title})</span>
+                <span>{activeSession ? 'Resume: Level ' + activeSession.levelId : 'Continue: Level ' + nextLevel.id + ' (' + nextLevel.title + ')'}</span>
               </button>
 
               <button
@@ -61,11 +61,27 @@ export const HomeDashboard: React.FC = () => {
               </button>
 
               <button
+                onClick={() => setActiveView('chaos-lab')}
+                className="flex items-center gap-2 px-4 py-2.5 bg-orange-950/40 hover:bg-orange-900/60 text-orange-200 text-xs font-medium rounded-lg border border-orange-900/60 transition-colors"
+              >
+                <Skull className="w-4 h-4 text-orange-400" />
+                <span>Chaos Lab (Raids)</span>
+              </button>
+
+              <button
+                onClick={() => setActiveView('senior-architect')}
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-950/40 hover:bg-indigo-900/60 text-indigo-200 text-xs font-medium rounded-lg border border-indigo-900/60 transition-colors"
+              >
+                <Crown className="w-4 h-4 text-yellow-400" />
+                <span>Architect Studio</span>
+              </button>
+
+              <button
                 onClick={() => startIncident('inc-db-meltdown')}
                 className="flex items-center gap-2 px-4 py-2.5 bg-red-950/40 hover:bg-red-900/60 text-red-200 text-xs font-medium rounded-lg border border-red-900/60 transition-colors"
               >
                 <Flame className="w-4 h-4 text-red-400" />
-                <span>SEV-1 On-Call Outage</span>
+                <span>SEV-1 Outage</span>
               </button>
             </div>
           </div>

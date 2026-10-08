@@ -102,19 +102,47 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({
           </div>
         </div>
 
-        {/* Hourly Cost */}
+        {/* Hourly Cost & Profit */}
         <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800/80">
           <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
             <DollarSign className="w-3.5 h-3.5 text-green-400" />
-            <span className="font-medium">Hourly Burn</span>
+            <span className="font-medium">Economics</span>
           </div>
-          <div className="text-lg font-bold font-mono tabular-nums text-emerald-300">
-            ${metrics.hourlyCost}
+          <div className={`text-lg font-bold font-mono tabular-nums ${metrics.netProfitPerHour >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {metrics.netProfitPerHour >= 0 ? `+$${metrics.netProfitPerHour}` : `-$${Math.abs(metrics.netProfitPerHour)}`}
             <span className="text-xs text-slate-400 font-normal ml-1">/hr</span>
           </div>
           <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-            Est. ${(metrics.hourlyCost * 24 * 30).toLocaleString()}/mo
+            Rev: ${metrics.revenuePerHour} · Cost: ${metrics.hourlyCost}
           </div>
+        </div>
+      </div>
+
+      {/* SRE Reliability Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 bg-slate-950/70 rounded-lg border border-slate-800/80 text-xs font-mono">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400">Target SLO:</span>
+            <span className="font-bold text-cyan-400">99.9%</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400">Current Availability:</span>
+            <span className={`font-bold ${metrics.sloCompliance >= 99.5 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {metrics.sloCompliance}%
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400">Error Budget:</span>
+            <span className={`font-bold ${metrics.errorBudgetPercent > 50 ? 'text-emerald-400' : metrics.errorBudgetPercent > 10 ? 'text-amber-400' : 'text-red-400'}`}>
+              {metrics.errorBudgetPercent}%
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-[11px] text-slate-400">
+          <span>Latency Percentiles:</span>
+          <span>P50: <strong className="text-white">{metrics.p50LatencyMs || Math.round(metrics.latencyMs * 0.85)}ms</strong></span>
+          <span>P95: <strong className="text-amber-300">{metrics.p95LatencyMs}ms</strong></span>
+          <span>P99: <strong className="text-red-400">{metrics.p99LatencyMs}ms</strong></span>
         </div>
       </div>
 

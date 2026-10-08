@@ -94,7 +94,7 @@ export const SkillTreeView: React.FC = () => {
 
                         {!isUnlocked && (
                           <button
-                            onClick={() => unlockSkill(skill.id, skill.xpRequired)}
+                            onClick={() => unlockSkill(skill.id)}
                             disabled={!canUnlock}
                             className={`px-2.5 py-1 text-xs font-medium rounded transition-all ${
                               canUnlock

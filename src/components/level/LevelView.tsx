@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGame } from '../../state/GameContext';
+import { saveSession } from '../../engine/api';
 import { LEVELS } from '../../data/levels';
 import { INFRASTRUCTURE_COMPONENTS } from '../../data/components';
 import { calculateSimulationMetrics } from '../../engine/simulator';
@@ -16,12 +17,12 @@ import {
 } from 'lucide-react';
 
 export const LevelView: React.FC = () => {
-  const { activeLevelId, startLevel, completeLevel, setActiveView } = useGame();
+  const { activeLevelId, activeSession, startLevel, completeLevel, setActiveView, apiError } = useGame();
   
   const level: Level = LEVELS.find(l => l.id === activeLevelId) || LEVELS[0];
 
   const [nodes, setNodes] = useState<ArchitectureNode[]>(() => {
-    return level.starterNodes ? JSON.parse(JSON.stringify(level.starterNodes)) : [];
+    return activeSession?.levelId === level.id && activeSession.state?.nodes ? activeSession.state.nodes : (level.starterNodes ? JSON.parse(JSON.stringify(level.starterNodes)) : []);
   });
   const [trafficPattern, setTrafficPattern] = useState<'constant' | 'spike' | 'retry-storm'>('constant');
   const [showBriefing, setShowBriefing] = useState<boolean>(true);
@@ -29,13 +30,22 @@ export const LevelView: React.FC = () => {
   const [showCompletionModal, setShowCompletionModal] = useState<boolean>(false);
   const [completionStats, setCompletionStats] = useState<{ stars: number; score: number }>({ stars: 0, score: 0 });
 
-  // Reset nodes whenever activeLevelId changes
+  // Restore saved session state after a refresh, or initialize a new attempt.
   useEffect(() => {
-    setNodes(level.starterNodes ? JSON.parse(JSON.stringify(level.starterNodes)) : []);
+    setNodes(activeSession?.levelId === level.id && activeSession.state?.nodes ? activeSession.state.nodes : (level.starterNodes ? JSON.parse(JSON.stringify(level.starterNodes)) : []));
+    setTrafficPattern(activeSession?.levelId === level.id && activeSession.state?.trafficPattern ? activeSession.state.trafficPattern : 'constant');
     setShowBriefing(true);
     setShowQuiz(false);
     setShowCompletionModal(false);
-  }, [level.id]);
+  }, [level.id, activeSession?.id]);
+
+  useEffect(() => {
+    if (!activeSession || activeSession.levelId !== level.id) return;
+    const timer = window.setTimeout(() => {
+      void saveSession(activeSession.id, { nodes, trafficPattern }).catch(() => undefined);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [activeSession?.id, level.id, nodes, trafficPattern]);
 
   // Compute live metrics
   const metrics = calculateSimulationMetrics(
@@ -53,20 +63,22 @@ export const LevelView: React.FC = () => {
       if (level.quiz && level.quiz.length > 0 && !showQuiz) {
         setShowQuiz(true);
       } else {
-        triggerVictory(validation.stars, validation.score);
+        void triggerVictory(validation.stars, validation.score, {});
       }
     }
   };
 
-  const handleQuizComplete = (correctCount: number) => {
+  const handleQuizComplete = (answers: Record<string, string>) => {
     setShowQuiz(false);
-    triggerVictory(validation.stars, validation.score + (correctCount * 25));
+    void triggerVictory(validation.stars, validation.score, answers);
   };
 
-  const triggerVictory = (stars: number, score: number) => {
-    setCompletionStats({ stars, score });
-    setShowCompletionModal(true);
-    completeLevel(level.id, stars, score, level.rewards.xp, level.rewards.achievementId);
+  const triggerVictory = async (stars: number, score: number, answers: Record<string, string>) => {
+    try {
+      const result = await completeLevel({ levelId: level.id, nodes, trafficPattern, answers });
+      setCompletionStats({ stars: result.stars, score: result.score });
+      setShowCompletionModal(true);
+    } catch { /* API error is shown by the game shell */ }
   };
 
   const handleResetLevel = () => {
@@ -85,6 +97,7 @@ export const LevelView: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 flex flex-col gap-6">
+      {apiError && <div role="alert" className="rounded-lg border border-red-900 bg-red-950/40 px-4 py-3 text-xs text-red-200">{apiError}</div>}
       {/* Level Header Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
